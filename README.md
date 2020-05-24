@@ -40,10 +40,19 @@ On my computer it takes about ~2s per keyframe, so it is rather slow. This demo 
 
 ### How can we improve this pipeline?
 
-In terms of performance, you could probably parallelize some things and also switch from python to C++ in this case.
-
-In terms of accuracy, this algorithm lacks a lot of ideas of state of the art SLAM algorithms. For example:
+In terms of accuracy, this algorithm lacks a lot of ideas of even old SLAM algorithms such as [PTAM](http://www.robots.ox.ac.uk/~gk/PTAM/). For example:
 
 - bundle adjustment
 - loop closure
-- Estimation of uncertainty when calculating e.g. essential matrix
+- choose keyframes more specifically (now, simply every third frame is used as keyframe)
+- track features in between keyframes
+- estimate uncertainty of estimations, e.g. when calculating the essential matrix
+
+
+
+In terms of computational speed, you could...
+
+- deactivate plotting
+- perform most of the computation on the GPU instead of the CPU
+- parallelize some things
+- switch from python to C++ (not sure about benefit, since opencv's function are already in C, or?)
