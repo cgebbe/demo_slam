@@ -7,6 +7,98 @@ import numpy as np
 import tqdm
 
 
+def main():
+    # PARAMS
+    parent_path_images = r'../input'
+    should_plot_depthmap = True
+
+    # init stuff
+    camK = get_camK()
+    gray_last = None
+    RT_orgCS_to_currCS = np.diag(np.ones(4))
+    cam_positions = np.zeros((3, 0))
+    xyz_in_orgCS = np.zeros((3, 0))
+
+    # load images
+    filenames = os.listdir(parent_path_images)
+    filenames = [f for f in filenames if f.endswith('.png')]
+    filenames.sort()
+    for idx_filename in tqdm.trange(0, 60, 3):
+
+        # load image and detect features
+        path = os.path.join(parent_path_images, filenames[idx_filename])
+        img = cv2.imread(path)
+        gray_curr = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        keyp_curr, desc_curr = detect_features(gray_curr)
+
+        # =======================
+        # Actual SLAM pipeline
+        if gray_last is not None:
+            matches, matchesMask = match_features(gray_last, keyp_last, desc_last,
+                                                  gray_curr, keyp_curr, desc_curr,
+                                                  )
+
+            # estimate relative pose between last and current camera position
+            RT_lastCS_to_currCS, inliers_last, inliers_curr = estimate_pose(matches, matchesMask,
+                                                                            keyp_last, keyp_curr, camK,
+                                                                            )
+            RT_orgCS_to_currCS = np.matmul(RT_lastCS_to_currCS, RT_orgCS_to_lastCS)
+
+            # Determine 3D coordinates of features via triangulation
+            xyz_new_in_orgCS = triangulate_points(camK,
+                                                  RT_orgCS_to_lastCS, inliers_last,
+                                                  RT_orgCS_to_currCS, inliers_curr,
+                                                  )
+            xyz_in_orgCS = np.hstack((xyz_in_orgCS, xyz_new_in_orgCS))
+
+            # Perform bundle adjustment across last keypoints
+            # TODO
+
+            # Plot 3D points by projecting them onto current image
+            if should_plot_depthmap:
+                plot_depthmap(xyz_in_orgCS, camK,
+                              gray_curr, RT_orgCS_to_currCS, idx_filename,
+                              )
+        # =======================
+
+        # store cam position
+        RT_curr_to_org = RT_orgCS_to_currCS
+        RT_org_to_curr = np.linalg.inv(RT_curr_to_org)
+        t_org_to_curr = RT_org_to_curr[0:3, [3]]
+        cam_positions = np.hstack((cam_positions, t_org_to_curr))
+
+        # store relevant data from this keyframe
+        RT_orgCS_to_lastCS = RT_orgCS_to_currCS
+        gray_last = gray_curr
+        keyp_last = keyp_curr
+        desc_last = desc_curr
+        plt.close('all')
+
+    """ AFTER PROCEESING ALL FRAMES... """
+    # export 3D points
+    np.save('../output/xyz_in_orgCS.npy', xyz_in_orgCS)
+
+    # plot 2D topview with points AND camera positions
+    mask_too_lo = xyz_in_orgCS[2, :] < -10
+    mask_too_hi = xyz_in_orgCS[2, :] > 100
+    mask_exlude = np.logical_or(mask_too_lo, mask_too_hi)
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    artist = ax.scatter(xyz_in_orgCS[0, ~mask_exlude], xyz_in_orgCS[2, ~mask_exlude],
+                        marker='.', s=1.0,  # marker size
+                        c=-xyz_in_orgCS[1, ~mask_exlude],
+                        vmin=0, vmax=2, cmap='viridis',
+                        )
+    ax.plot(cam_positions[0, :], cam_positions[2, :], 'x', color='k', label='cam_positions')
+    cbar = plt.colorbar(artist, orientation="vertical", pad=0.05)
+    cbar.set_label("-y_CCS")
+    ax.set_xlabel('x_in_CCS')
+    ax.set_ylabel('z_in_CCS')
+    ax.set_aspect('equal')
+    fig.tight_layout()
+    # plt.show()
+    fig.savefig('../output/plot_topview.png')
+
+
 def get_camK():
     """ from file calib_cam_to_cam.txt """
     str = r'P_rect_02: 7.215377e+02 0.000000e+00 6.095593e+02 4.485728e+01 0.000000e+00 7.215377e+02 1.728540e+02 2.163791e-01 0.000000e+00 0.000000e+00 1.000000e+00 2.745884e-03'
@@ -132,7 +224,9 @@ def triangulate_points(camK,
     return xyz1_in_orgCS[0:3, :]
 
 
-def plot_depthmap(xyz_in_orgCS, camK, RT_orgCS_to_currCS):
+def plot_depthmap(xyz_in_orgCS, camK,
+                  gray_curr, RT_orgCS_to_currCS, idx_filename,
+                  ):
     # get uvs
     xyz_in_currCS = np.matmul(RT_orgCS_to_currCS[0:3, 0:3], xyz_in_orgCS)
     xyz_in_currCS += RT_orgCS_to_currCS[0:3, [3]]
@@ -169,94 +263,6 @@ def plot_depthmap(xyz_in_orgCS, camK, RT_orgCS_to_currCS):
     fig.savefig("../output/depthmap_{:03d}.png".format(idx_filename))
 
 
-# PARAMS
-parent_path_images = r'../input'
-should_plot_depthmap = True
-
-# init stuff
-camK = get_camK()
-gray_last = None
-RT_orgCS_to_currCS = np.diag(np.ones(4))
-cam_positions = np.zeros((3, 0))
-xyz_in_orgCS = np.zeros((3, 0))
-
-# load images
-filenames = os.listdir(parent_path_images)
-filenames = [f for f in filenames if f.endswith('.png')]
-filenames.sort()
-nimages = len(filenames)
-for idx_filename in tqdm.trange(0, 60, 3):
-
-    # load image and detect features
-    path = os.path.join(parent_path_images, filenames[idx_filename])
-    img = cv2.imread(path)
-    gray_curr = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    keyp_curr, desc_curr = detect_features(gray_curr)
-
-    # =======================
-    # Actual SLAM pipeline
-    if gray_last is not None:
-        matches, matchesMask = match_features(gray_last, keyp_last, desc_last,
-                                              gray_curr, keyp_curr, desc_curr,
-                                              )
-
-        # estimate relative pose between last and current camera position
-        RT_lastCS_to_currCS, inliers_last, inliers_curr = estimate_pose(matches, matchesMask,
-                                                                        keyp_last, keyp_curr, camK,
-                                                                        )
-        RT_orgCS_to_currCS = np.matmul(RT_lastCS_to_currCS, RT_orgCS_to_lastCS)
-
-        # Determine 3D coordinates of features via triangulation
-        xyz_new_in_orgCS = triangulate_points(camK,
-                                              RT_orgCS_to_lastCS, inliers_last,
-                                              RT_orgCS_to_currCS, inliers_curr,
-                                              )
-        xyz_in_orgCS = np.hstack((xyz_in_orgCS, xyz_new_in_orgCS))
-
-        # Perform bundle adjustment across last keypoints
-        # TODO
-
-        # Plot 3D points by projecting them onto current image
-        if should_plot_depthmap:
-            plot_depthmap(xyz_in_orgCS, camK, RT_orgCS_to_currCS)
-    # =======================
-
-    # store cam position
-    RT_curr_to_org = RT_orgCS_to_currCS
-    RT_org_to_curr = np.linalg.inv(RT_curr_to_org)
-    t_org_to_curr = RT_org_to_curr[0:3, [3]]
-    cam_positions = np.hstack((cam_positions, t_org_to_curr))
-
-    # store relevant data from this keyframe
-    RT_orgCS_to_lastCS = RT_orgCS_to_currCS
-    gray_last = gray_curr
-    keyp_last = keyp_curr
-    desc_last = desc_curr
-    plt.close('all')
-
-""" AFTER PROCEESING ALL FRAMES...
-"""
-# export 3D points
-np.save('../output/xyz_in_orgCS.npy', xyz_in_orgCS)
-
-# plot 2D topview with points AND camera positions
-mask_too_lo = xyz_in_orgCS[2, :] < -10
-mask_too_hi = xyz_in_orgCS[2, :] > 100
-mask_exlude = np.logical_or(mask_too_lo, mask_too_hi)
-fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-artist = ax.scatter(xyz_in_orgCS[0, ~mask_exlude], xyz_in_orgCS[2, ~mask_exlude],
-                    marker='.', s=1.0,  # marker size
-                    c=-xyz_in_orgCS[1, ~mask_exlude],
-                    vmin=0, vmax=2, cmap='viridis',
-                    )
-ax.plot(cam_positions[0, :], cam_positions[2, :], 'x', color='k', label='cam_positions')
-cbar = plt.colorbar(artist, orientation="vertical", pad=0.05)
-cbar.set_label("-y_CCS")
-ax.set_xlabel('x_in_CCS')
-ax.set_ylabel('z_in_CCS')
-ax.set_aspect('equal')
-fig.tight_layout()
-# plt.show()
-fig.savefig('../output/plot_topview.png')
-
-print("=== Finished")
+if __name__ == '__main__':
+    main()
+    print("=== Finished")
