@@ -2,7 +2,7 @@ import open3d as o3d
 import numpy as np
 
 # params
-path_xyz = "output/xyz_in_orgCS.npy"
+path_xyz = "../output/xyz_in_orgCS.npy"
 
 # load xyz
 xyz = np.load(path_xyz)

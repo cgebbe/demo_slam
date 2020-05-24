@@ -166,11 +166,11 @@ def plot_depthmap(xyz_in_orgCS, camK, RT_orgCS_to_currCS):
     ax.set_xlim([0, width])
     ax.set_ylim([height, 0])
     fig.tight_layout()
-    fig.savefig("output/depthmap_{}.png".format(idx_filename))
+    fig.savefig("../output/depthmap_{:03d}.png".format(idx_filename))
 
 
 # PARAMS
-parent_path_images = r'data'
+parent_path_images = r'../input'
 should_plot_depthmap = True
 
 # init stuff
@@ -237,7 +237,7 @@ for idx_filename in tqdm.trange(0, 60, 3):
 """ AFTER PROCEESING ALL FRAMES...
 """
 # export 3D points
-np.save('output/xyz_in_orgCS.npy', xyz_in_orgCS)
+np.save('../output/xyz_in_orgCS.npy', xyz_in_orgCS)
 
 # plot 2D topview with points AND camera positions
 mask_too_lo = xyz_in_orgCS[2, :] < -10
@@ -257,6 +257,6 @@ ax.set_ylabel('z_in_CCS')
 ax.set_aspect('equal')
 fig.tight_layout()
 # plt.show()
-fig.savefig('output/plot_topview.png')
+fig.savefig('../output/plot_topview.png')
 
 print("=== Finished")
