@@ -46,7 +46,7 @@ In terms of accuracy, this algorithm lacks a lot of ideas of even old SLAM algor
 - loop closure
 - choose keyframes more specifically (now, simply every third frame is used as keyframe)
 - track features in between keyframes
-- estimate uncertainty of estimations, e.g. when calculating the essential matrix
+- Use more precise optimizations for the estimations, e.g. when calculating the essential matrix
 
 
 
