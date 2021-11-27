@@ -1,6 +1,6 @@
 # About
 
-Simple SLAM pipeline using opencv. The example below uses an image sequence from the [KITTI dataset](http://www.cvlibs.net/datasets/kitti/raw_data.php).
+Simple [SLAM](https://en.wikipedia.org/wiki/Simultaneous_localization_and_mapping) pipeline using opencv. The example below uses an image sequence from the [KITTI dataset](http://www.cvlibs.net/datasets/kitti/raw_data.php).
 
 ![Video of images including estimated 3D points](output.gif)
 
